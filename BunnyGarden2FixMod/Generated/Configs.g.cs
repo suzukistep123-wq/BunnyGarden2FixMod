@@ -53,6 +53,12 @@ public static class Configs
     public static ConfigEntry<bool> MoreTalkReactions;
     /// <summary>一部モーションでスカートが体にめり込む現象を補正</summary>
     public static ConfigEntry<bool> FixAnimationClipping;
+    /// <summary>キャスト照明の明るさ倍率</summary>
+    public static ConfigEntry<float> CharaLightMultiplier;
+    /// <summary>部屋全体の明るさ</summary>
+    public static ConfigEntry<float> RoomBrightnessOffset;
+    /// <summary>部屋のオレンジ感を抑える</summary>
+    public static ConfigEntry<float> RoomWarmthReduction;
     /// <summary>高解像度チェキを有効化</summary>
     public static ConfigEntry<bool> ChekiHighResEnabled;
     /// <summary>チェキ解像度</summary>
@@ -273,6 +279,33 @@ Display2: サブモニター（モニター2台以上のときのみ）");
         FixAnimationClipping = cfg.Bind("Animation", "FixAnimationClipping",
             true,
             @"一部モーションでスカートが体にめり込む現象を補正");
+
+        CharaLightMultiplier = cfg.Bind("Lighting", "CharaLightMultiplier",
+            1.0f,
+            new ConfigDescription(
+                @"キャスト照明の明るさ倍率
+バーでキャストを照らすライトの明るさを一括で変更します。
+バーが暗くてキャストが見えにくいときに上げてください。
+環境 (カウンター・棚など) の明るさには影響しません。",
+                new AcceptableValueRange<float>(0.0f, 1.5f)));
+
+        RoomBrightnessOffset = cfg.Bind("Lighting", "RoomBrightnessOffset",
+            0.0f,
+            new ConfigDescription(
+                @"部屋全体の明るさ
+バー全体 (背景・キャスト含む画面全体) の明るさを調整します。
+ポストプロセス (LiftGammaGain の gain) を経由するため、画面全体に影響します。
+0 で既定。プラスで明るく、マイナスで暗くなります。",
+                new AcceptableValueRange<float>(-0.3f, 0.5f)));
+
+        RoomWarmthReduction = cfg.Bind("Lighting", "RoomWarmthReduction",
+            0.0f,
+            new ConfigDescription(
+                @"部屋のオレンジ感を抑える
+バー全体の暖色 (オレンジ) の強さを抑えて、より自然な色味にします。
+ポストプロセス (LiftGammaGain の gamma) を経由するため、画面全体に影響します。
+0 で既定のオレンジ、1 で色補正なし (ニュートラル) になります。",
+                new AcceptableValueRange<float>(0.0f, 1.0f)));
 
         ChekiHighResEnabled = cfg.Bind("Cheki", "HighResEnabled",
             false,
@@ -790,6 +823,42 @@ FastForward ホットキー押下中の Time.timeScale 倍率。",
             Desc     = "",
             Kind     = global::BunnyGarden2FixMod.Patches.Settings.UIKind.Toggle,
             Accessor = new global::BunnyGarden2FixMod.Patches.Settings.BoolAccessor(() => FixAnimationClipping),
+        },
+        new global::BunnyGarden2FixMod.Patches.Settings.UIEntryMeta
+        {
+            Category = "Lighting",
+            Label    = "キャスト照明の明るさ倍率",
+            Desc     = "バーでキャストを照らすライトの明るさを一括で変更します。\nバーが暗くてキャストが見えにくいときに上げてください。\n環境 (カウンター・棚など) の明るさには影響しません。\n",
+            Kind       = global::BunnyGarden2FixMod.Patches.Settings.UIKind.Slider,
+            SliderMin  = 0f,
+            SliderMax  = 1.5f,
+            SliderStep = 0.05f,
+            Format     = "{0:F2}x",
+            Accessor = new global::BunnyGarden2FixMod.Patches.Settings.FloatAccessor(() => CharaLightMultiplier, 0.05f),
+        },
+        new global::BunnyGarden2FixMod.Patches.Settings.UIEntryMeta
+        {
+            Category = "Lighting",
+            Label    = "部屋全体の明るさ",
+            Desc     = "バー全体 (背景・キャスト含む画面全体) の明るさを調整します。\nポストプロセス (LiftGammaGain の gain) を経由するため、画面全体に影響します。\n0 で既定。プラスで明るく、マイナスで暗くなります。\n",
+            Kind       = global::BunnyGarden2FixMod.Patches.Settings.UIKind.Slider,
+            SliderMin  = -0.3f,
+            SliderMax  = 0.5f,
+            SliderStep = 0.02f,
+            Format     = "{0:+0.00;-0.00;0.00}",
+            Accessor = new global::BunnyGarden2FixMod.Patches.Settings.FloatAccessor(() => RoomBrightnessOffset, 0.02f),
+        },
+        new global::BunnyGarden2FixMod.Patches.Settings.UIEntryMeta
+        {
+            Category = "Lighting",
+            Label    = "部屋のオレンジ感を抑える",
+            Desc     = "バー全体の暖色 (オレンジ) の強さを抑えて、より自然な色味にします。\nポストプロセス (LiftGammaGain の gamma) を経由するため、画面全体に影響します。\n0 で既定のオレンジ、1 で色補正なし (ニュートラル) になります。\n",
+            Kind       = global::BunnyGarden2FixMod.Patches.Settings.UIKind.Slider,
+            SliderMin  = 0f,
+            SliderMax  = 1f,
+            SliderStep = 0.05f,
+            Format     = "{0:F2}",
+            Accessor = new global::BunnyGarden2FixMod.Patches.Settings.FloatAccessor(() => RoomWarmthReduction, 0.05f),
         },
         new global::BunnyGarden2FixMod.Patches.Settings.UIEntryMeta
         {

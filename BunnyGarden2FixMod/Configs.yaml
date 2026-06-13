@@ -231,6 +231,54 @@
       ui:
         kind: toggle
 
+- section: Lighting
+  name: ライティング
+  header: |
+    バーシーンでキャストを照らすライト (CharaLight) の明るさを調整します。
+    値は元の明るさに対する倍率です (1.0 で既定、2.0 で 2 倍、0.0 で消灯)。
+  configs:
+    - name: CharaLightMultiplier
+      label: キャスト照明の明るさ倍率
+      type: float
+      default: 1.0
+      range: [0.0, 1.5]
+      description: |
+        バーでキャストを照らすライトの明るさを一括で変更します。
+        バーが暗くてキャストが見えにくいときに上げてください。
+        環境 (カウンター・棚など) の明るさには影響しません。
+      ui:
+        kind: slider
+        step: 0.05
+        format: '{0:F2}x'
+
+    - name: RoomBrightnessOffset
+      label: 部屋全体の明るさ
+      type: float
+      default: 0.0
+      range: [-0.3, 0.5]
+      description: |
+        バー全体 (背景・キャスト含む画面全体) の明るさを調整します。
+        ポストプロセス (LiftGammaGain の gain) を経由するため、画面全体に影響します。
+        0 で既定。プラスで明るく、マイナスで暗くなります。
+      ui:
+        kind: slider
+        step: 0.02
+        format: '{0:+0.00;-0.00;0.00}'
+
+    - name: RoomWarmthReduction
+      label: 部屋のオレンジ感を抑える
+      type: float
+      default: 0.0
+      range: [0.0, 1.0]
+      description: |
+        バー全体の暖色 (オレンジ) の強さを抑えて、より自然な色味にします。
+        ポストプロセス (LiftGammaGain の gamma) を経由するため、画面全体に影響します。
+        0 で既定のオレンジ、1 で色補正なし (ニュートラル) になります。
+      ui:
+        kind: slider
+        step: 0.05
+        format: '{0:F2}'
+
 - section: Cheki
   name: チェキ高解像度保存
   configs:

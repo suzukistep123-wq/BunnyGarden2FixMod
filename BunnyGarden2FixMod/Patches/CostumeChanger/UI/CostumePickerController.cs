@@ -216,11 +216,7 @@ public class CostumePickerController : MonoBehaviour
 
     private void Update()
     {
-        // === 診断: シーン階層ダンプ (一時的) ===
-        // F1: バー環境トグル (カウンター + 棚を ON/OFF) - 機能、本実装
-        // F11: 浅いダンプ (depth<=2) - 全シーンの全体像把握用
-        // F12: "ENV" を含む GameObject の配下を深さ無制限でダンプ - バー環境の深掘り用
-        // F11/F12 は対象オブジェクト特定後は削除予定 (現状はバックアップとして残す)
+        // F1: バー環境トグル (カウンター + 棚を ON/OFF)
         var kbDiag = UnityEngine.InputSystem.Keyboard.current;
         if (kbDiag != null)
         {
@@ -228,16 +224,7 @@ public class CostumePickerController : MonoBehaviour
             {
                 BunnyGarden2FixMod.Patches.EnvObjectToggle.Toggle();
             }
-            if (kbDiag[UnityEngine.InputSystem.Key.F11].wasPressedThisFrame)
-            {
-                BunnyGarden2FixMod.Patches.SceneHierarchyDumper.DumpAllLoadedScenesShallow();
-            }
-            if (kbDiag[UnityEngine.InputSystem.Key.F12].wasPressedThisFrame)
-            {
-                BunnyGarden2FixMod.Patches.SceneHierarchyDumper.FindAndDump("ENV");
-            }
         }
-        // === 診断ここまで ===
 
         if (m_shapeFalloffDirtyAtUnscaledTime > 0f && Time.unscaledTime >= m_shapeFalloffDirtyAtUnscaledTime)
         {

@@ -64,6 +64,8 @@ public class Plugin : BaseUnityPlugin
         Patches.CostumeChanger.StockingsDonorLoader.Initialize(gameObject);
         freeCamera = Patches.FreeCamera.FreeCameraManager.Initialize(gameObject);
         Patches.TimeController.Initialize(gameObject);
+        Patches.CharaLightController.Initialize(gameObject);
+        Patches.RoomLightingController.Initialize(gameObject);
         SceneManager.sceneUnloaded += Patches.CostumeChanger.PantiesAltSlotMatchPatch.OnSceneUnloaded;
         PatchLogger.LogInfo($"プラグイン起動: {MyPluginInfo.PLUGIN_GUID} v{MyPluginInfo.PLUGIN_VERSION}");
         PatchLogger.LogInfo($"解像度パッチを適用しました: {Configs.Width.Value}x{Configs.Height.Value}");
