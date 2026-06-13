@@ -50,7 +50,10 @@ public class CostumePickerController : MonoBehaviour
     // 各タブの選択肢（Locked=true は未開放。モック準拠で "???" 表示、選択・適用不可）
     private List<(CostumeType Costume, bool Locked)> m_costumeItems = new();
 
-    private List<(int Type, int Color, bool Locked)> m_pantiesItems = new();
+    // Panties: 段階B で donor 対応に拡張。
+    // Locked は donor キャラの閲覧履歴 (PantiesViewHistory) で判定。
+    // 既存 override の (donor, type, color) は履歴未蓄積でも grandfather する。
+    private List<(CharID Donor, int Type, int Color, bool Locked)> m_pantiesItems = new();
     private List<(int Type, bool Locked)> m_stockingItems = new();
     // Locked は donor キャラ × 衣装 の閲覧履歴 (CostumeViewHistory.IsViewed) で判定。
     // 既存 override の (donor, costume) は履歴未蓄積でも grandfather する（解除・再適用を可能にする）。
@@ -213,6 +216,29 @@ public class CostumePickerController : MonoBehaviour
 
     private void Update()
     {
+        // === 診断: シーン階層ダンプ (一時的) ===
+        // F1: バー環境トグル (カウンター + 棚を ON/OFF) - 機能、本実装
+        // F11: 浅いダンプ (depth<=2) - 全シーンの全体像把握用
+        // F12: "ENV" を含む GameObject の配下を深さ無制限でダンプ - バー環境の深掘り用
+        // F11/F12 は対象オブジェクト特定後は削除予定 (現状はバックアップとして残す)
+        var kbDiag = UnityEngine.InputSystem.Keyboard.current;
+        if (kbDiag != null)
+        {
+            if (kbDiag[UnityEngine.InputSystem.Key.F1].wasPressedThisFrame)
+            {
+                BunnyGarden2FixMod.Patches.EnvObjectToggle.Toggle();
+            }
+            if (kbDiag[UnityEngine.InputSystem.Key.F11].wasPressedThisFrame)
+            {
+                BunnyGarden2FixMod.Patches.SceneHierarchyDumper.DumpAllLoadedScenesShallow();
+            }
+            if (kbDiag[UnityEngine.InputSystem.Key.F12].wasPressedThisFrame)
+            {
+                BunnyGarden2FixMod.Patches.SceneHierarchyDumper.FindAndDump("ENV");
+            }
+        }
+        // === 診断ここまで ===
+
         if (m_shapeFalloffDirtyAtUnscaledTime > 0f && Time.unscaledTime >= m_shapeFalloffDirtyAtUnscaledTime)
         {
             m_shapeFalloffDirtyAtUnscaledTime = -1f;
@@ -365,15 +391,33 @@ public class CostumePickerController : MonoBehaviour
             m_costumeItems.Add((c, locked));
         }
 
-        var pantiesViewedSet = new HashSet<(int, int)>();
-        foreach (var p in PantiesViewHistory.GetViewedList(charId)) pantiesViewedSet.Add((p.Type, p.Color));
-        m_pantiesItems = new List<(int, int, bool)>();
-        for (int t = 0; t < PantiesOverrideStore.TypeCount; t++)
+        // Panties: 段階B で donor 対応に拡張 (Bottoms/Tops と同形)。
+        // 6 人 × 7 type × 5 color = 210 枠。Locked は donor キャラの閲覧履歴で判定。
+        // 既存 override の (donor, type, color) は履歴未蓄積でも grandfather する。
+        // donor == target も許可 (旧来挙動: 自キャラの type/color 選択)。
+        // パンツはマテリアル 1 枚の差し替えなので、donor 体型差は無関係。フルボディ衣装等の除外不要。
+        m_pantiesItems = new List<(CharID, int, int, bool)>();
+        bool hasPantiesOverride = PantiesOverrideStore.TryGet(charId, out var curPanties);
+        for (int d = (int)CharID.KANA; d < (int)CharID.NUM; d++)
         {
-            for (int c = 0; c < PantiesOverrideStore.ColorCount; c++)
+            var donor = (CharID)d;
+            // donor キャラの閲覧履歴を取得
+            var donorPantiesViewedSet = new HashSet<(int, int)>();
+            foreach (var p in PantiesViewHistory.GetViewedList(donor))
+                donorPantiesViewedSet.Add((p.Type, p.Color));
+            for (int t = 0; t < PantiesOverrideStore.TypeCount; t++)
             {
-                bool locked = !pantiesViewedSet.Contains((t, c));
-                m_pantiesItems.Add((t, c, locked));
+                for (int c = 0; c < PantiesOverrideStore.ColorCount; c++)
+                {
+                    bool pLocked = !donorPantiesViewedSet.Contains((t, c));
+                    if (pLocked && hasPantiesOverride
+                        && curPanties.DonorChar == donor
+                        && curPanties.Type == t && curPanties.Color == c)
+                    {
+                        pLocked = false;
+                    }
+                    m_pantiesItems.Add((donor, t, c, pLocked));
+                }
             }
         }
 
@@ -449,8 +493,8 @@ public class CostumePickerController : MonoBehaviour
             x => x.Locked);
         m_pantiesSelected = FindOverrideOrFirstUnlocked(
             m_pantiesItems,
-            PantiesOverrideStore.TryGet(charId, out var ovPT, out var ovPC),
-            x => x.Type == ovPT && x.Color == ovPC,
+            PantiesOverrideStore.TryGet(charId, out var ovPanties),
+            x => x.Donor == ovPanties.DonorChar && x.Type == ovPanties.Type && x.Color == ovPanties.Color,
             x => x.Locked);
         m_stockingSelected = FindOverrideOrFirstUnlocked(
             m_stockingItems,
@@ -624,7 +668,9 @@ public class CostumePickerController : MonoBehaviour
             CharId = m_activeChar,
             ActiveTab = m_activeTab,
             CostumeLabels = m_costumeItems.Select(x => x.Locked ? "???" : ResolveCostumeName(x.Costume)).ToList(),
-            PantiesLabels = m_pantiesItems.Select(x => x.Locked ? "???" : ResolvePantiesName(m_activeChar, x.Type, x.Color)).ToList(),
+            PantiesLabels = m_pantiesItems.Select(x => x.Locked
+                ? $"{ResolveCharName(x.Donor)}/???"
+                : $"{ResolveCharName(x.Donor)}/{ResolvePantiesName(x.Donor, x.Type, x.Color)}").ToList(),
             StockingLabels = m_stockingItems.Select(x => x.Locked ? "???" : ResolveStockingName(x.Type)).ToList(),
             BottomsLabels = m_bottomsItems.Select(x => x.Locked
                 ? $"{ResolveCharName(x.Donor)}/???"
@@ -644,8 +690,8 @@ public class CostumePickerController : MonoBehaviour
             TopsSelected = m_topsSelected,
             CostumeCurrent = CostumeOverrideStore.TryGet(m_activeChar, out var oc)
                 ? m_costumeItems.FindIndex(x => x.Costume == oc) : -1,
-            PantiesCurrent = PantiesOverrideStore.TryGet(m_activeChar, out var opT, out var opC)
-                ? m_pantiesItems.FindIndex(x => x.Type == opT && x.Color == opC) : -1,
+            PantiesCurrent = PantiesOverrideStore.TryGet(m_activeChar, out var op)
+                ? m_pantiesItems.FindIndex(x => x.Donor == op.DonorChar && x.Type == op.Type && x.Color == op.Color) : -1,
             StockingCurrent = StockingOverrideStore.TryGet(m_activeChar, out var os)
                 ? m_stockingItems.FindIndex(x => x.Type == os) : -1,
             BottomsCurrent = BottomsOverrideStore.TryGet(m_activeChar, out var ob)
@@ -765,6 +811,7 @@ public class CostumePickerController : MonoBehaviour
     /// <summary>
     /// パンツ名を MSGID_SPLIT_2.FITTING_ROOM_PANTIES_{CHAR}_A_0 を起点に
     /// (type * ColorCount + color) のオフセットで解決する。
+    /// 段階B: id は donor キャラを渡す (旧来は target=donor だったため変更なし、明示化)。
     /// </summary>
     private static string ResolvePantiesName(CharID id, int type, int color)
     {
@@ -897,12 +944,18 @@ public class CostumePickerController : MonoBehaviour
                 if (m_pantiesSelected < 0 || m_pantiesSelected >= m_pantiesItems.Count) return;
                 if (m_pantiesItems[m_pantiesSelected].Locked) return;
                 var pItem = m_pantiesItems[m_pantiesSelected];
-                int t = pItem.Type;
-                int c = pItem.Color;
-                if (PantiesOverrideStore.TryGet(m_activeChar, out var curT, out var curC) && curT == t && curC == c)
+                if (PantiesOverrideStore.TryGet(m_activeChar, out var curP)
+                    && curP.DonorChar == pItem.Donor && curP.Type == pItem.Type && curP.Color == pItem.Color)
                 {
                     PantiesOverrideStore.Clear(m_activeChar);
-                    RestoreDefaultPanties(m_activeChar);
+                    // cross 適用 (snapshot あり) → スナップショット復元
+                    // 同キャラ経路のみ (snapshot 無し) → 従来通り本体に任せる
+                    var envR = GBSystem.Instance?.GetActiveEnvScene();
+                    var charObjR = envR?.FindCharacter(m_activeChar);
+                    if (!PantiesCrossLoader.TryRestoreSnapshot(m_activeChar, charObjR))
+                    {
+                        RestoreDefaultPanties(m_activeChar);
+                    }
                     m_view.Render(BuildRenderData());
                     return;
                 }
@@ -1092,29 +1145,124 @@ public class CostumePickerController : MonoBehaviour
         finally { m_loading = false; }
     }
 
+    /// <summary>
+    /// パンツ適用 (段階C: donor 対応の本実装)。
+    /// donor == target なら従来経路 (env.ReloadPanties)、donor != target なら MOD 側で donor の
+    /// マテリアルを直接ロードして target の mesh_skin_lower に貼る。
+    /// </summary>
     private void ApplyPanties()
     {
         if (m_activeChar >= CharID.NUM) return;
         if (m_pantiesSelected < 0 || m_pantiesSelected >= m_pantiesItems.Count) return;
         if (m_pantiesItems[m_pantiesSelected].Locked) return;
         var pItem = m_pantiesItems[m_pantiesSelected];
+        var donor = pItem.Donor;
         int t = pItem.Type;
         int c = pItem.Color;
-        PantiesOverrideStore.Set(m_activeChar, t, c);
 
-        var env = GBSystem.Instance?.GetActiveEnvScene();
-        if (env != null)
+        if (!PantiesOverrideStore.Set(m_activeChar, donor, t, c))
         {
-            try
-            {
-                env.ReloadPanties(m_activeChar, c, t);
-            }
-            catch (Exception ex)
-            {
-                PatchLogger.LogWarning($"[CostumePicker] パンツ切替失敗: {ex}");
-            }
+            PatchLogger.LogWarning($"[CostumePicker] PantiesOverrideStore.Set 失敗: target={m_activeChar} donor={donor} type={t} color={c}");
+            return;
         }
+
+        if (donor == m_activeChar)
+        {
+            // 同キャラ: 本体経路を尊重 (本体の m_pantiesMaterialHandle / m_lastLoadArg.PantiesType/Color も更新される)
+            ApplyPantiesSameChar(m_activeChar, t, c);
+        }
+        else
+        {
+            // donor != target: MOD 側で donor のマテリアルを直接ロードして target に貼る
+            ApplyPantiesCrossCharAsync(m_activeChar, donor, t, c).Forget();
+        }
+
         m_view.Render(BuildRenderData());
+    }
+
+    /// <summary>
+    /// donor == target ケース: 従来通り env.ReloadPanties で本体に任せる。
+    /// SensitiveMode の処理も本体側で行われる。
+    /// </summary>
+    private static void ApplyPantiesSameChar(CharID id, int type, int color)
+    {
+        var env = GBSystem.Instance?.GetActiveEnvScene();
+        if (env == null) return;
+        try
+        {
+            env.ReloadPanties(id, color, type);
+        }
+        catch (Exception ex)
+        {
+            PatchLogger.LogWarning($"[CostumePicker] パンツ切替失敗 (同キャラ経路): {ex}");
+        }
+    }
+
+    /// <summary>
+    /// donor != target ケース: donor のマテリアルを直接ロードして target の mesh_skin_lower に貼る。
+    /// SensitiveMode が ON のときは MOD は何もせず、本体の SensitiveMode マテリアルが優先される。
+    /// </summary>
+    private async UniTask ApplyPantiesCrossCharAsync(CharID target, CharID donor, int type, int color)
+    {
+        // SensitiveMode ON 時は本体側で sensitivemode_skin マテリアルが既に貼られているはず。
+        // donor を上書きすると本体の SensitiveMode 想定と食い違うので skip して本体経路で再描画させる。
+        var sd = GBSystem.Instance?.RefSaveData();
+        if (sd != null && sd.IsSensitiveMode())
+        {
+            PatchLogger.LogInfo($"[CostumePicker] SensitiveMode 中のため donor mat 適用 skip: target={target} donor={donor}");
+            return;
+        }
+
+        string path = PantiesCrossLoader.BuildPath(donor, type, color);
+        var env = GBSystem.Instance?.GetActiveEnvScene();
+        var charObj = env?.FindCharacter(target);
+        if (charObj == null)
+        {
+            PatchLogger.LogWarning($"[CostumePicker] target {target} の GameObject が見つからず apply 中止");
+            return;
+        }
+
+        Material mat = null;
+        try
+        {
+            mat = await PantiesCrossLoader.LoadMaterialAsync(path);
+        }
+        catch (Exception ex)
+        {
+            PatchLogger.LogWarning($"[CostumePicker] donor マテリアルロード失敗: path={path}: {ex}");
+            return;
+        }
+        if (mat == null)
+        {
+            PatchLogger.LogWarning($"[CostumePicker] donor マテリアルが null: path={path}");
+            return;
+        }
+
+        if (charObj == null)
+        {
+            PatchLogger.LogWarning($"[CostumePicker] target {target} が destroy 済みのため apply 中止");
+            return;
+        }
+        var smr = charObj.GetComponentsInChildren<SkinnedMeshRenderer>(true)
+            .FirstOrDefault(x => x != null && x.name == "mesh_skin_lower");
+        if (smr == null)
+        {
+            PatchLogger.LogWarning($"[CostumePicker] target {target} に mesh_skin_lower が見つからず apply 中止");
+            return;
+        }
+        var mats = smr.materials;
+        int idx = PantiesCrossLoader.FindPantiesMaterialIndex(mats);
+        if (idx < 0)
+        {
+            PatchLogger.LogWarning($"[CostumePicker] target {target} の mesh_skin_lower に下着マテリアルスロットなし");
+            return;
+        }
+        // cross 代入前にスナップショット捕獲 (解除時に元の見た目に戻すため)。
+        // 既に捕獲済みなら何もしない (最初の cross 適用前の状態を保持)。
+        PantiesCrossLoader.CaptureSnapshotIfFirst(target, mats, idx);
+        mats[idx] = mat;
+        smr.materials = mats;
+        PatchLogger.LogInfo($"[CostumePicker] パンツ適用 (cross): target={target} ← {donor}/type={type}/color={color}");
     }
 
     private void ApplyStocking()
@@ -1207,7 +1355,11 @@ public class CostumePickerController : MonoBehaviour
         }
         ReloadCurrentAsync(m_activeChar).Forget();
         PantiesOverrideStore.Clear(m_activeChar);
-        RestoreDefaultPanties(m_activeChar);
+        // cross 適用 (snapshot あり) → 復元、無ければ本体経路で既定復元
+        if (!PantiesCrossLoader.TryRestoreSnapshot(m_activeChar, charObj))
+        {
+            RestoreDefaultPanties(m_activeChar);
+        }
         // KneeSocks 系 override 中は Restore してから Clear（charObj は上で取得済みを再利用）
         if (StockingOverrideStore.TryGet(m_activeChar, out var stkForReset)
             && StockingOverrideStore.IsKneeSocksType(stkForReset)
@@ -1434,6 +1586,9 @@ public class CostumePickerController : MonoBehaviour
             StockingOverrideStore.Clear(id);
             BottomsOverrideStore.Clear(id);
             TopsOverrideStore.Clear(id);
+            // Panties: cross snapshot を破棄 (ReloadCurrentInternal でキャラが再ロードされるため
+            // 旧 SMR への参照は無効になる。新キャラには snapshot を持たせない)。
+            PantiesCrossLoader.DropSnapshot(id);
             // Bottoms / Tops: reload 前に Restore（reload 経路は同 costume だと no-op になり SMR が戻らないため）
             var envB = GBSystem.Instance?.GetActiveEnvScene();
             var charObjB = envB?.FindCharacter(id);
@@ -1459,8 +1614,12 @@ public class CostumePickerController : MonoBehaviour
     {
         // m_costumeItems 等は ShowSettings 時点の RebuildItemsFor でキャスト分ビルド済み。
         // DLC 未導入衣装はそこで既にフィルタされているため、そのまま bulk API に渡せる。
+        // Panties: 段階B 以降、m_pantiesItems は donor 込みで構築されるため、
+        // 自キャラ分 (Donor == id) のみを抽出して MarkViewedBulk に渡す。
         CostumeViewHistory.MarkViewedBulk(id, m_costumeItems.Select(x => x.Costume));
-        PantiesViewHistory.MarkViewedBulk(id, m_pantiesItems.Select(x => (x.Type, x.Color)));
+        PantiesViewHistory.MarkViewedBulk(id, m_pantiesItems
+            .Where(x => x.Donor == id)
+            .Select(x => (x.Type, x.Color)));
         StockingViewHistory.MarkViewedBulk(id, m_stockingItems.Select(x => x.Type));
         RebuildItemsFor(id);   // 解放反映のため再構築
         if (m_view != null && m_view.IsShown) ShowPicker();
