@@ -62,6 +62,9 @@ public class CostumePickerController : MonoBehaviour
 
     public static CostumePickerController Instance { get; private set; }
 
+    /// <summary>現在ウォードローブで選択中のキャラ。CharMoveController が移動対象の特定に使う。</summary>
+    public CharID ActiveChar => m_activeChar;
+
     /// <summary>View が表示中かを外部から参照する。</summary>
     public bool IsPickerShown => m_view != null && m_view.IsShown;
 
