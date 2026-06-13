@@ -66,6 +66,7 @@ public class Plugin : BaseUnityPlugin
         Patches.TimeController.Initialize(gameObject);
         Patches.CharaLightController.Initialize(gameObject);
         Patches.RoomLightingController.Initialize(gameObject);
+        Patches.CharMoveController.Initialize(gameObject);
         SceneManager.sceneUnloaded += Patches.CostumeChanger.PantiesAltSlotMatchPatch.OnSceneUnloaded;
         PatchLogger.LogInfo($"プラグイン起動: {MyPluginInfo.PLUGIN_GUID} v{MyPluginInfo.PLUGIN_VERSION}");
         PatchLogger.LogInfo($"解像度パッチを適用しました: {Configs.Width.Value}x{Configs.Height.Value}");
